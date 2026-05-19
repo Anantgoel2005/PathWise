@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+venv/
+.venv/
+*.pt
+*.pth
+*.mp4
+*.webm
+*.avi
+*.log
+output/
+debug_run*.log
+final_verify.log

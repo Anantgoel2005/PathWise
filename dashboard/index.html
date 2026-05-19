@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PathWise | Edge-AI Road Actor Prediction</title>
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+    
+    <!-- Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    
+    <!-- Socket.IO -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                        display: ['Outfit', 'sans-serif'],
+                    },
+                    colors: {
+                        dark: {
+                            900: '#0B0D13',
+                            800: '#11141D',
+                            700: '#1A1D27',
+                            600: '#252936',
+                        },
+                        brand: {
+                            cyan: '#00C8FF',
+                            blue: '#3B82F6',
+                            purple: '#8B5CF6',
+                        },
+                        hazard: {
+                            safe: '#10B981',
+                            warn: '#F59E0B',
+                            crit: '#EF4444',
+                        }
+                    },
+                    backgroundImage: {
+                        'grid-pattern': "linear-gradient(to right, #1A1D27 1px, transparent 1px), linear-gradient(to bottom, #1A1D27 1px, transparent 1px)",
+                        'radial-glow': "radial-gradient(circle at center, rgba(0, 200, 255, 0.15) 0%, transparent 70%)",
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background-color: #0B0D13;
+            color: #E2E8F0;
+            overflow: hidden; /* App mode, no scroll */
+        }
+
+        .bg-grid {
+            background-size: 40px 40px;
+            background-position: center;
+        }
+
+        .glass-panel {
+            background: rgba(17, 20, 29, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+        }
+
+        .cyber-border {
+            position: relative;
+        }
+        .cyber-border::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            border: 1px solid transparent;
+            background: linear-gradient(135deg, rgba(0,200,255,0.3) 0%, rgba(0,0,0,0) 50%, rgba(139,92,246,0.3) 100%) border-box;
+            -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            pointer-events: none;
+            border-radius: inherit;
+        }
+
+        /* Animations */
+        @keyframes pulse-ring {
+            0% { transform: scale(0.8); opacity: 0.5; }
+            100% { transform: scale(2.5); opacity: 0; }
+        }
+
+        @keyframes scan-line {
+            0% { transform: translateY(0); opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { transform: translateY(300px); opacity: 0; }
+        }
+
+        .radar-ring {
+            position: absolute;
+            border-radius: 50%;
+            border: 1px solid rgba(0, 200, 255, 0.3);
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+        }
+        
+        .radar-ping {
+            animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+        }
+
+        .scanner {
+            position: absolute;
+            top: 0; left: 0; right: 0; height: 2px;
+            background: linear-gradient(to right, transparent, #00C8FF, transparent);
+            box-shadow: 0 0 10px #00C8FF, 0 0 20px #00C8FF;
+            animation: scan-line 3s linear infinite;
+        }
+
+        /* Live dot blinking */
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        .live-dot {
+            animation: blink 1.5s ease-in-out infinite;
+        }
+        
+        /* Smooth hover transitions */
+        .hover-lift {
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.3s ease;
+        }
+        .hover-lift:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px -5px rgba(0, 200, 255, 0.15);
+        }
+
+        /* Canvas container */
+        #bev-container {
+            background-image: radial-gradient(circle at bottom center, rgba(0, 200, 255, 0.1) 0%, transparent 60%);
+        }
+    </style>
+</head>
+<body class="min-h-screen relative font-sans antialiased selection:bg-brand-cyan selection:text-dark-900">
+
+    <!-- Background Elements -->
+    <div class="fixed inset-0 z-0 bg-grid-pattern bg-grid opacity-[0.15] pointer-events-none"></div>
+    <div class="fixed inset-0 z-0 bg-radial-glow pointer-events-none"></div>
+
+    <!-- Navigation -->
+    <nav class="relative z-20 glass-panel border-b-0 border-white/5 py-4 px-6 md:px-12 flex justify-between items-center sticky top-0">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded bg-gradient-to-br from-brand-cyan to-brand-blue flex items-center justify-center font-display font-bold text-white shadow-[0_0_15px_rgba(0,200,255,0.4)]">
+                P
+            </div>
+            <span class="font-display font-bold text-xl tracking-wide text-white">PATH<span class="text-brand-cyan">WISE</span></span>
+        </div>
+        
+        <div class="hidden md:flex items-center gap-4 text-sm font-medium text-gray-400 bg-dark-700/50 px-4 py-1.5 rounded-full border border-white/5">
+            <span class="text-brand-cyan"><i class="ri-dashboard-fill"></i> Live Inference</span>
+        </div>
+        
+        <div class="flex items-center gap-4">
+            <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-dark-700/80 border border-white/10 text-xs font-mono">
+                <div id="conn-dot" class="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_#EF4444]"></div>
+                <span id="conn-status" class="text-red-400">DISCONNECTED</span>
+            </div>
+            <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-dark-700/80 border border-white/10 text-xs font-mono">
+                <span id="backend-badge" class="text-gray-400">MODEL: WAITING</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="relative z-10 w-full h-[calc(100vh-73px)] p-4 flex flex-col gap-4">
+        
+        <!-- Top Half: Video & BEV -->
+        <div class="grid lg:grid-cols-3 gap-4 h-[55%] flex-shrink-0">
+            
+            <!-- Video Stream (Takes up 2 columns) -->
+            <div class="lg:col-span-2 relative glass-panel rounded-xl cyber-border overflow-hidden flex items-center justify-center bg-black shadow-[0_10px_30px_rgba(0,0,0,0.5)]">
+                <!-- Live Video Feed -->
+                <img id="video-stream" src="/video_feed" class="w-full h-full object-contain absolute inset-0 z-0" alt="Live Feed Offline">
+                
+                <!-- HUD Overlay Elements -->
+                <div class="absolute top-4 left-4 font-mono text-xs text-brand-cyan/70 space-y-1 z-10 drop-shadow-md">
+                    <div>CAM_SRC: FRONT_MAIN</div>
+                    <div>LATENCY: <span id="sys-latency">--</span>ms</div>
+                </div>
+                <div class="absolute top-4 right-4 text-right font-mono text-xs text-brand-cyan/70 space-y-1 z-10 drop-shadow-md">
+                    <div id="live-time">00:00:00</div>
+                    <div>TRACKS: <span id="sys-tracks" class="text-white">0</span></div>
+                    <div>FPS: <span id="sys-fps" class="text-green-400">--</span></div>
+                </div>
+                
+                <!-- Dynamic Cut-In Banner (Hidden by default) -->
+                <div id="cutin-banner" class="hidden absolute bottom-4 left-4 right-4 glass-panel bg-dark-900/90 rounded px-4 py-3 flex justify-center items-center border border-hazard-crit shadow-[0_0_15px_rgba(239,68,68,0.5)] z-10 transition-opacity duration-300">
+                    <div class="flex items-center gap-3">
+                        <i class="ri-alert-fill text-hazard-crit animate-pulse text-2xl"></i>
+                        <span class="font-display font-bold text-hazard-crit tracking-wider text-lg" id="cutin-text">CUT-IN WARNING DETECTED</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BEV Radar Canvas (Takes up 1 column) -->
+            <div id="bev-container" class="relative glass-panel rounded-xl cyber-border overflow-hidden bg-[#0a0c12] flex flex-col items-center">
+                <div class="w-full bg-dark-700/80 px-4 py-2 border-b border-white/10 flex justify-between items-center z-10">
+                    <span class="font-display font-semibold text-brand-cyan tracking-wider text-xs flex items-center gap-2">
+                        <i class="ri-radar-line animate-pulse"></i> BIRD'S-EYE VIEW
+                    </span>
+                    <div class="flex gap-2">
+                        <span class="text-[9px] font-mono text-gray-500 bg-white/5 px-2 py-1 rounded">ZOOM: x1.5</span>
+                    </div>
+                </div>
+                <!-- The canvas area fills the rest of the height -->
+                <div class="w-full flex-grow relative overflow-hidden" id="canvas-wrapper">
+                    <canvas id="bev-canvas" class="absolute inset-0 w-full h-full"></canvas>
+                </div>
+            </div>
+            
+        </div>
+
+        <!-- Bottom Half: Telemetry Table -->
+        <div class="flex-grow glass-panel rounded-xl cyber-border overflow-hidden flex flex-col min-h-0">
+            <div class="w-full bg-dark-700/80 px-4 py-2 border-b border-white/10 flex justify-between items-center z-10">
+                <span class="font-display font-semibold text-white tracking-wider text-xs flex items-center gap-2">
+                    <i class="ri-table-line"></i> ACTOR TELEMETRY
+                </span>
+                <span class="text-[9px] font-mono text-gray-500">BUFFER_SIZE: 12 frames</span>
+            </div>
+            
+            <div class="flex-grow overflow-y-auto">
+                <table class="w-full text-left border-collapse relative">
+                    <thead class="sticky top-0 z-20 bg-dark-800/90 backdrop-blur-md">
+                        <tr class="text-[10px] uppercase tracking-wider text-gray-400 font-mono shadow-sm">
+                            <th class="p-3 border-b border-white/5">Track ID</th>
+                            <th class="p-3 border-b border-white/5">Class</th>
+                            <th class="p-3 border-b border-white/5">Distance</th>
+                            <th class="p-3 border-b border-white/5">Speed (Long.)</th>
+                            <th class="p-3 border-b border-white/5">Lat. Vel.</th>
+                            <th class="p-3 border-b border-white/5">TTC</th>
+                            <th class="p-3 border-b border-white/5 text-right">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody class="text-xs font-medium" id="telemetry-body">
+                        <!-- Populated dynamically via WebSocket -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+    </main>
+
+    <script>
+        // BEV Radar Drawing Setup
+        const canvas = document.getElementById('bev-canvas');
+        const ctx = canvas.getContext('2d');
+        const wrapper = document.getElementById('canvas-wrapper');
+
+        function resizeCanvas() {
+            const rect = wrapper.getBoundingClientRect();
+            // Scale up for high-DPI displays so it looks crisp
+            canvas.width = rect.width * 2;
+            canvas.height = rect.height * 2;
+            ctx.scale(2, 2);
+        }
+        
+        window.addEventListener('resize', resizeCanvas);
+        // Call once, delay slightly so CSS layout finishes
+        setTimeout(resizeCanvas, 100);
+
+        function drawBEV(actors) {
+            // Virtual dimensions in scaled space
+            const w = canvas.width / 2;
+            const h = canvas.height / 2;
+            
+            ctx.clearRect(0, 0, w, h);
+            
+            // Ego origin (bottom center)
+            const originX = w / 2;
+            const originY = h - 30; // 30px offset from bottom
+            
+            // Pixels per meter - zooming in! 
+            // Was 5px/m in OpenCV. Let's make it 12px/m here (zoom x2.4)
+            const PPM = 12.0; 
+            
+            // Draw Distance Rings (10m, 20m, 30m, 40m)
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.08)";
+            ctx.lineWidth = 1;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.font = "10px monospace";
+            
+            [10, 20, 30, 40].forEach(dist => {
+                const r = dist * PPM;
+                ctx.beginPath();
+                ctx.arc(originX, originY, r, Math.PI, 0); // Half circle upwards
+                ctx.stroke();
+                
+                ctx.fillStyle = "rgba(255, 255, 255, 0.25)";
+                ctx.fillText(`${dist}m`, originX, originY - r - 8);
+            });
+            
+            // Draw Lanes (approximate 3.5m width = 1.75m each side)
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+            ctx.setLineDash([10, 15]);
+            ctx.beginPath();
+            ctx.moveTo(originX - (1.75 * PPM), originY);
+            ctx.lineTo(originX - (1.75 * PPM), 0);
+            ctx.moveTo(originX + (1.75 * PPM), originY);
+            ctx.lineTo(originX + (1.75 * PPM), 0);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            
+            // Draw Ego Vehicle Marker
+            ctx.fillStyle = "#00C8FF";
+            ctx.beginPath();
+            ctx.moveTo(originX, originY - 15);
+            ctx.lineTo(originX - 8, originY + 5);
+            ctx.lineTo(originX + 8, originY + 5);
+            ctx.fill();
+            
+            // Draw Actors
+            actors.forEach(actor => {
+                // Map meters to pixels. X is lateral, Y is forward.
+                const px = originX + (actor.lat_distance_m * PPM);
+                const py = originY - (actor.distance_m * PPM);
+                
+                // Color based on hazard level
+                let color = "#10B981"; // Safe
+                if(actor.hazard_level === 'CRITICAL' || actor.is_cutin) {
+                    color = "#EF4444";
+                } else if(actor.hazard_level === 'WARNING') {
+                    color = "#F59E0B";
+                }
+                
+                // Draw dot
+                ctx.fillStyle = color;
+                ctx.beginPath();
+                ctx.arc(px, py, 4, 0, Math.PI*2);
+                ctx.fill();
+                
+                // Draw glow
+                ctx.fillStyle = color.replace(')', ', 0.3)').replace('rgb', 'rgba');
+                ctx.beginPath();
+                ctx.arc(px, py, 12, 0, Math.PI*2);
+                ctx.fill();
+                
+                // Label (ID)
+                ctx.fillStyle = "white";
+                ctx.font = "bold 9px monospace";
+                ctx.fillText(actor.track_id, px, py - 12);
+                
+                // Draw velocity vector if moving
+                if (actor.speed_kmh < -5 || Math.abs(actor.lat_speed_kmh) > 2) {
+                    const velScale = 0.5; // pixel per kmh
+                    // Convert approach speed to relative vector (- speed is closing gap, so vector points down relative to object)
+                    // Wait, speed_kmh is longitudinal. Negative means getting closer (points down on screen).
+                    // lat_speed_kmh: positive is moving right.
+                    const vx = actor.lat_speed_kmh * velScale;
+                    const vy = actor.speed_kmh * velScale * -1; // -1 because -speed means moving down the screen
+                    
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(px, py);
+                    ctx.lineTo(px + vx, py + vy);
+                    ctx.stroke();
+                }
+            });
+        }
+
+        // Live Clock
+        setInterval(() => {
+            const now = new Date();
+            const timeStr = now.toLocaleTimeString('en-US', { hour12: false });
+            document.getElementById('live-time').textContent = timeStr + '.' + Math.floor(now.getMilliseconds()/100);
+        }, 100);
+
+        // SocketIO Setup
+        const socket = io();
+        
+        let lastPing = Date.now();
+        let isFlashing = false;
+        let cutinInterval = null;
+
+        socket.on('connect', () => {
+            const dot = document.getElementById('conn-dot');
+            const txt = document.getElementById('conn-status');
+            dot.className = "w-2 h-2 rounded-full bg-green-500 live-dot shadow-[0_0_8px_#10B981]";
+            txt.className = "text-green-400";
+            txt.textContent = "SYSTEM ONLINE";
+        });
+
+        socket.on('disconnect', () => {
+            const dot = document.getElementById('conn-dot');
+            const txt = document.getElementById('conn-status');
+            dot.className = "w-2 h-2 rounded-full bg-red-500 shadow-[0_0_8px_#EF4444]";
+            txt.className = "text-red-400";
+            txt.textContent = "DISCONNECTED";
+        });
+
+        socket.on('telemetry', (data) => {
+            // Latency calc
+            const now = Date.now();
+            document.getElementById('sys-latency').textContent = Math.min(999, now - lastPing);
+            lastPing = now;
+
+            // System updates
+            document.getElementById('sys-fps').textContent = data.system.fps;
+            document.getElementById('sys-tracks').textContent = data.system.tracks;
+            
+            const badge = document.getElementById('backend-badge');
+            badge.textContent = `MODEL: ${data.system.backend.toUpperCase()}`;
+            if(data.system.backend === 'idd') {
+                badge.className = "text-brand-cyan";
+            } else {
+                badge.className = "text-yellow-400";
+            }
+
+            // Cut-in Warning Banner
+            const banner = document.getElementById('cutin-banner');
+            const bannerTxt = document.getElementById('cutin-text');
+            
+            if(data.cutins && data.cutins.length > 0) {
+                banner.classList.remove('hidden');
+                bannerTxt.textContent = `⚠ CUT-IN DETECTED: ${data.cutins.join(' / ')}`;
+            } else {
+                banner.classList.add('hidden');
+            }
+
+            // Update Telemetry Table & Radar
+            const tbody = document.getElementById('telemetry-body');
+            tbody.innerHTML = '';
+            
+            // Draw to Canvas
+            drawBEV(data.actors);
+
+            // Sort by distance
+            data.actors.sort((a, b) => a.distance_m - b.distance_m);
+
+            data.actors.forEach(actor => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-white/5 transition-colors border-b border-white/5";
+                
+                let hazardClass = 'bg-hazard-safe/20 text-hazard-safe border-hazard-safe/30';
+                let hazardText = 'SAFE';
+                
+                if(actor.hazard_level === 'CRITICAL') {
+                    hazardClass = 'bg-hazard-crit/20 text-hazard-crit border-hazard-crit/30';
+                    hazardText = 'CRITICAL';
+                    tr.classList.add('bg-red-900/20');
+                } else if(actor.hazard_level === 'WARNING') {
+                    hazardClass = 'bg-hazard-warn/20 text-hazard-warn border-hazard-warn/30';
+                    hazardText = 'WARNING';
+                }
+
+                if(actor.is_cutin) {
+                    hazardText = 'CUT-IN';
+                    hazardClass = 'bg-hazard-crit/20 text-hazard-crit border-hazard-crit/30 animate-pulse';
+                }
+
+                tr.innerHTML = `
+                    <td class="p-4 font-mono text-brand-cyan">#${actor.track_id}</td>
+                    <td class="p-4">${actor.class_name}</td>
+                    <td class="p-4">${actor.distance_m}m</td>
+                    <td class="p-4">${actor.speed_kmh} km/h</td>
+                    <td class="p-4">${actor.lat_speed_kmh} km/h</td>
+                    <td class="p-4 font-mono ${actor.hazard_level === 'CRITICAL' ? 'text-hazard-crit' : 'text-gray-400'}">${actor.ttc_s ? actor.ttc_s + 's' : 'N/A'}</td>
+                    <td class="p-4 text-right">
+                        <span class="px-2 py-1 rounded text-xs border ${hazardClass}">${hazardText}</span>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        });
+    </script>
+</body>
+</html>
