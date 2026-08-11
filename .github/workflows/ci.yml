@@ -22,6 +22,6 @@ jobs:
       - name: Compile Python sources
         run: python -m compileall -q main.py demo.py modules utils
       - name: Run unit tests
-        run: pytest
+        run: python -m pytest
       - name: Exercise model-free demo
         run: python demo.py --frames 120 --no-video --output output/ci-demo

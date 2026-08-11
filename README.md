@@ -113,7 +113,7 @@ For meaningful distance and TTC values, calibrate against known lane or road mea
 
 ```powershell
 python -m pip install -r requirements-test.txt
-pytest
+python -m pytest
 python -m compileall -q main.py demo.py modules utils
 python demo.py --frames 120 --no-video --output output/validation
 ```
