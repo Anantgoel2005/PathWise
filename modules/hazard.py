@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 import config
-from modules.estimator import TrackedActor
+from modules.models import TrackedActor
 
 
 class HazardLevel(Enum):
@@ -56,9 +56,9 @@ class HazardEngine:
         self.lateral_threshold = lateral_threshold  # km/h
         self.lane_width = getattr(config, "LANE_WIDTH_THRESHOLD", 2.0)
 
-        print(f"[Hazard] TTC thresholds: RED ≤ {ttc_red}s | YELLOW ≤ {ttc_yellow}s")
+        print(f"[Hazard] TTC thresholds: RED <= {ttc_red}s | YELLOW <= {ttc_yellow}s")
         print(f"[Hazard] Cut-in lateral velocity threshold: {lateral_threshold} km/h")
-        print(f"[Hazard] Ego lane width threshold: ±{self.lane_width} m")
+        print(f"[Hazard] Ego lane width threshold: +/-{self.lane_width} m")
 
     def assess(self, actors: list[TrackedActor]) -> list[HazardAssessment]:
         """

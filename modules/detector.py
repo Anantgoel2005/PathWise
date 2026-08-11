@@ -4,38 +4,11 @@ YOLOv10 detection + ByteTrack multi-object tracking wrapper.
 Supports both COCO and IDD (India Driving Dataset) model backends.
 """
 
-from dataclasses import dataclass
-from ultralytics import YOLO
 import numpy as np
+from ultralytics import YOLO
 
 import config
-
-
-@dataclass
-class Detection:
-    """Single detected & tracked road actor."""
-
-    track_id: int
-    bbox: tuple        # (x1, y1, x2, y2) pixel coordinates
-    class_id: int
-    class_name: str
-    confidence: float
-    bottom_center: tuple  # (cx, y2) — foot of the bounding box
-
-    @property
-    def width(self) -> int:
-        return self.bbox[2] - self.bbox[0]
-
-    @property
-    def height(self) -> int:
-        return self.bbox[3] - self.bbox[1]
-
-    @property
-    def center(self) -> tuple:
-        return (
-            (self.bbox[0] + self.bbox[2]) // 2,
-            (self.bbox[1] + self.bbox[3]) // 2,
-        )
+from modules.models import Detection
 
 
 class Detector:
@@ -56,7 +29,7 @@ class Detector:
         model_path: str = config.MODEL_PATH,
         tracker_config: str = config.TRACKER_CONFIG,
         confidence: float = config.CONFIDENCE_THRESHOLD,
-        target_classes: list[int] = None,
+        target_classes: list[int] | None = None,
     ):
         self.model = YOLO(model_path)
         self.tracker_config = tracker_config
@@ -66,7 +39,9 @@ class Detector:
 
         print(f"[Detector] Backend  : {self.backend.upper()} ({model_path})")
         print(f"[Detector] Tracker  : {tracker_config}")
-        print(f"[Detector] Classes  : {[config.CLASS_NAMES.get(c, c) for c in self.target_classes]}")
+        print(
+            f"[Detector] Classes  : {[config.CLASS_NAMES.get(c, c) for c in self.target_classes]}"
+        )
         print(f"[Detector] Conf thr : {confidence}")
 
         # Build a fast lookup for class name resolution
@@ -100,24 +75,24 @@ class Detector:
             if boxes is None or boxes.id is None:
                 return detections
 
-            track_ids   = boxes.id.int().cpu().numpy()
-            bboxes      = boxes.xyxy.int().cpu().numpy()
-            class_ids   = boxes.cls.int().cpu().numpy()
+            track_ids = boxes.id.int().cpu().numpy()
+            bboxes = boxes.xyxy.int().cpu().numpy()
+            class_ids = boxes.cls.int().cpu().numpy()
             confidences = boxes.conf.cpu().numpy()
 
             for i in range(len(track_ids)):
-                tid        = int(track_ids[i])
+                tid = int(track_ids[i])
                 x1, y1, x2, y2 = (
                     int(bboxes[i][0]),
                     int(bboxes[i][1]),
                     int(bboxes[i][2]),
                     int(bboxes[i][3]),
                 )
-                cid  = int(class_ids[i])
+                cid = int(class_ids[i])
                 conf = float(confidences[i])
 
                 bottom_center = ((x1 + x2) // 2, y2)
-                class_name    = self._class_names.get(cid, f"Class_{cid}")
+                class_name = self._class_names.get(cid, f"Class_{cid}")
 
                 detections.append(
                     Detection(
