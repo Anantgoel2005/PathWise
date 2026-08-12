@@ -5,27 +5,10 @@ Maintains per-track velocity buffers and computes real-world speed from BEV coor
 
 import time
 from collections import defaultdict, deque
-from dataclasses import dataclass
-
 
 import config
-from modules.detector import Detection
+from modules.models import Detection, TrackedActor
 from modules.perspective import PerspectiveTransformer
-
-
-@dataclass
-class TrackedActor:
-    """Enriched detection with distance, velocity, and BEV position."""
-
-    track_id: int
-    detection: Detection
-    distance_m: float  # Distance from ego vehicle (meters)
-    lateral_distance_m: float  # Lateral offset from ego vehicle center (meters)
-    velocity_mps: float  # Longitudinal relative velocity (m/s, negative = approaching)
-    velocity_kmh: float  # Longitudinal speed (km/h)
-    lateral_velocity_mps: float  # Lateral velocity (m/s)
-    lateral_velocity_kmh: float  # Lateral speed (km/h)
-    bev_position: tuple  # (bev_x, bev_y) in BEV pixel space
 
 
 class VelocityEstimator:
@@ -54,7 +37,7 @@ class VelocityEstimator:
         self._active_ids: set = set()
 
     def update(
-        self, detections: list[Detection], timestamp: float = None
+        self, detections: list[Detection], timestamp: float | None = None
     ) -> list[TrackedActor]:
         """
         Process a batch of detections for a single frame.
@@ -101,8 +84,8 @@ class VelocityEstimator:
             buf = self._buffers[tid]
             if len(buf) >= 2:
                 # Use oldest and newest entries for smoothed velocity
-                t_old, d_old, bx_old, by_old = buf[0]
-                t_new, d_new, bx_new, by_new = buf[-1]
+                t_old, d_old, bx_old, _by_old = buf[0]
+                t_new, d_new, bx_new, _by_new = buf[-1]
                 dt = t_new - t_old
 
                 if dt > 0.001:  # Avoid division by near-zero

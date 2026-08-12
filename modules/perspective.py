@@ -20,9 +20,9 @@ class PerspectiveTransformer:
 
     def __init__(
         self,
-        src_points: np.ndarray = None,
-        dst_points: np.ndarray = None,
-        bev_size: tuple = None,
+        src_points: np.ndarray | None = None,
+        dst_points: np.ndarray | None = None,
+        bev_size: tuple[int, int] | None = None,
     ):
         self.src_points = (
             src_points if src_points is not None else config.BEV_SRC_POINTS

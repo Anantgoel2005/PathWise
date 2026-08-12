@@ -1,0 +1,17 @@
+{
+  "scenario": "deterministic-synthetic-v1",
+  "frames": 180,
+  "fps": 30,
+  "duration_seconds": 6.0,
+  "actor_samples": 540,
+  "cut_in_frames": 33,
+  "minimum_ttc_seconds": 2.033,
+  "frames_with_level": {
+    "CRITICAL": 15,
+    "SAFE": 180,
+    "WARNING": 62
+  },
+  "video": "pathwise-synthetic-demo.mp4",
+  "telemetry": "telemetry.csv",
+  "disclaimer": "Synthetic hazard-engine demonstration; not a perception benchmark."
+}

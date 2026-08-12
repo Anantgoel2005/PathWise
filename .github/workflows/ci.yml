@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install deterministic test dependencies
+        run: python -m pip install -r requirements-test.txt
+      - name: Compile Python sources
+        run: python -m compileall -q main.py demo.py modules utils
+      - name: Run unit tests
+        run: python -m pytest
+      - name: Exercise model-free demo
+        run: python demo.py --frames 120 --no-video --output output/ci-demo

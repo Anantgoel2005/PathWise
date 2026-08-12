@@ -24,13 +24,12 @@ if not exist "venv\Scripts\python.exe" (
 
 echo [READY] Environment verified.
 echo.
-echo [HINT] Press ENTER to use the default showcase video: videoplayback.mp4
+echo [HINT] Enter a local road-video path. For the model-free portfolio demo,
+echo        run run_demo.bat instead.
 echo.
 set /p video_path=">>> Enter path to video file (or drag/drop): "
 
-if "%video_path%"=="" (
-    set video_path="videoplayback.mp4"
-)
+if "%video_path%"=="" exit /b
 
 :: Clean quotes
 set video_path=%video_path:"=%

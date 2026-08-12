@@ -1,5 +1,6 @@
 __pycache__/
 *.pyc
+.pytest_cache/
 venv/
 .venv/
 *.pt
@@ -7,6 +8,7 @@ venv/
 *.mp4
 *.webm
 *.avi
+*.mkv
 *.log
 output/
 debug_run*.log

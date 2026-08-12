@@ -22,12 +22,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import config
 from modules.detector import Detector
-from modules.perspective import PerspectiveTransformer
 from modules.estimator import VelocityEstimator
 from modules.hazard import HazardEngine
 from modules.overlay import DashboardOverlay
+from modules.perspective import PerspectiveTransformer
 from utils.csv_logger import CSVLogger
-from modules.web_server import PathWiseWebServer
 
 
 def parse_args():
@@ -79,6 +78,17 @@ Examples:
         type=float,
         default=config.CONFIDENCE_THRESHOLD,
         help=f"Detection confidence threshold (default: {config.CONFIDENCE_THRESHOLD})",
+    )
+    parser.add_argument(
+        "--dashboard",
+        action="store_true",
+        help="Serve the optional dashboard locally on 127.0.0.1.",
+    )
+    parser.add_argument(
+        "--dashboard-port",
+        type=int,
+        default=5000,
+        help="Local dashboard port (default: 5000).",
     )
 
     return parser.parse_args()
@@ -161,9 +171,12 @@ def main():
     hazard_engine = HazardEngine()
     overlay = DashboardOverlay()
 
-    # Initialize and start Web Server
-    web_server = PathWiseWebServer(port=5000)
-    web_server.start()
+    web_server = None
+    if args.dashboard:
+        from modules.web_server import PathWiseWebServer
+
+        web_server = PathWiseWebServer(port=args.dashboard_port)
+        web_server.start()
 
     csv_logger = None
     if config.OUTPUT_CSV and not args.no_csv:
@@ -172,11 +185,11 @@ def main():
     # ─── Video Writer (optional) ───────────────────────────────────────────────
     video_writer = None
     if args.record:
-        from datetime import datetime
+        from datetime import datetime, timezone
 
         rec_dir = os.path.join(os.path.dirname(__file__), "output", "recordings")
         os.makedirs(rec_dir, exist_ok=True)
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         rec_path = os.path.join(rec_dir, f"pathwise_{ts}.mp4")
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
         video_writer = cv2.VideoWriter(rec_path, fourcc, input_fps, (frame_w, frame_h))
@@ -215,11 +228,19 @@ def main():
             assessments = hazard_engine.assess(actors)
 
             # ── Step 4: Render Overlay ──
-            display_frame = overlay.render(frame.copy(), assessments, fps=fps, show_minimap=True)
+            display_frame = overlay.render(
+                frame.copy(), assessments, fps=fps, show_minimap=True
+            )
 
             # ── Step 4.5: Update Web Dashboard ──
-            web_server.update_frame(display_frame)
-            web_server.broadcast_telemetry(assessments, fps, estimator.active_track_count, config.MODEL_BACKEND)
+            if web_server:
+                web_server.update_frame(display_frame)
+                web_server.broadcast_telemetry(
+                    assessments,
+                    fps,
+                    estimator.active_track_count,
+                    config.MODEL_BACKEND,
+                )
 
             # ── Step 5: Log Data ──
             if csv_logger and assessments:
